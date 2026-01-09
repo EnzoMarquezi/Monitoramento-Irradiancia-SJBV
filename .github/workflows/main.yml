@@ -1,0 +1,27 @@
+name: Automatizacao de Dados SFCR
+on:
+  schedule:
+    - cron: '0 3 * * *' # Roda todos os dias às 03:00 da manhã
+  workflow_dispatch: # Permite rodar manualmente se quiser
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v3
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Instalar dependencias
+        run: pip install requests pandas
+      - name: Executar script de coleta
+        run: python coleta_dados.py
+      - name: Salvar alteracoes no CSV
+        run: |
+          git config --global user.name 'Automated Bot'
+          git config --global user.email 'bot@github.com'
+          git add .
+          git commit -m "Atualizacao automatica de dados: $(date)"
+          git push
