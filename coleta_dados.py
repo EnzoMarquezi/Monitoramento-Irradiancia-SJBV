@@ -3,7 +3,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-# --- Configurações SFCR 54 kWp ---
+# --- Configurações do Local do SFCR ---
 LAT, LON = -21.967841992730392, -46.81400488524457
 ARQUIVO_SAIDA = "1_irradiancia_NASA_SJBV_FromAPI.csv"
 DATA_INICIAL_ESTUDO = datetime(2022, 1, 1)
@@ -24,7 +24,7 @@ else:
 
 # 3. Execução da Requisição
 if data_inicio_request < data_limite_superior:
-    # A NASA limita dados horários a períodos de no máximo 1 ano (365 dias)
+    # NASA limita dados horários a períodos de no máximo 1 ano (365 dias)
     # Calculamos o fim desta fatia de coleta
     data_fim_request = min(data_inicio_request + timedelta(days=364), data_limite_superior)
     
@@ -43,7 +43,7 @@ if data_inicio_request < data_limite_superior:
         response.raise_for_status()
         json_data = response.json()
 
-        # Extração direta para garantir que zeros não sejam descartados
+        # Garantir que zeros não sejam descartados
         params = json_data['properties']['parameter']
         df_novo = pd.DataFrame(params)
         df_novo.index = pd.to_datetime(df_novo.index, format='%Y%m%d%H')
@@ -61,7 +61,7 @@ if data_inicio_request < data_limite_superior:
         print(f"✅ Sucesso! Dados adicionados de {start_str} até {end_str}.")
         
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"Erro: {e}")
         exit(1)
 else:
-    print("✅ Base de dados já está atualizada.")
+    print("Base de dados já está atualizada.")
