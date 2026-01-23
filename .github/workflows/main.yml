@@ -30,6 +30,6 @@ jobs:
         run: |
           git config --global user.name 'GitHub Action Bot'
           git config --global user.email 'action@github.com'
-          git add 1_irradiancia_NASA_SJBV_FromAPI.csv
-          git commit -m "Atualização automática" || echo "Sem alterações para salvar"
+          git add *.csv  # <-- Isso adiciona todos os CSVs novos ou alterados
+          git commit -m "Atualização automática: Dados Horários e Diários NASA" || echo "Sem alterações"
           git push
