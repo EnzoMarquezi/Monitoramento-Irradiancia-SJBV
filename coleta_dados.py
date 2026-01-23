@@ -12,10 +12,10 @@ DATA_INICIAL_ESTUDO = datetime(2022, 1, 1)
 # 1. Definir data limite de segurança (Hoje - 30 dias)
 data_limite_superior = datetime.now() - timedelta(days=30)
 
-def coletar_dados_nasa(resolucao, parametros, data_inicio):
+def coletar_dados_nasa(resolucao, parametros, data_inicio, data_fim):
     """Função auxiliar para requisitar dados à API"""
     start_str = data_inicio.strftime('%Y%m%d')
-    end_str = data_limite_superior.strftime('%Y%m%d')
+    end_str = data_fim.strftime('%Y%m%d')
     
     url = (
         f"https://power.larc.nasa.gov/api/temporal/{resolucao}/point?"
@@ -35,39 +35,54 @@ def coletar_dados_nasa(resolucao, parametros, data_inicio):
 # ==========================================
 # 1. PROCESSAMENTO DIÁRIO (GHI + TEMP MÍN/MÉD/MÁX)
 # ==========================================
-print("Iniciando coleta diária (Irradiância + Temperaturas)...")
-# Parâmetros: Irradiância (ALLSKY_SFC_SW_DWN), Temp Média (T2M), Temp Mín (T2M_MIN), Temp Máx (T2M_MAX)
+print("Iniciando coleta diária...")
 params_d = "ALLSKY_SFC_SW_DWN,T2M,T2M_MIN,T2M_MAX"
-dados_d = coletar_dados_nasa("daily", params_d, DATA_INICIAL_ESTUDO)
+# Dados diários permitem períodos longos, então buscamos tudo até a data limite
+dados_d = coletar_dados_nasa("daily", params_d, DATA_INICIAL_ESTUDO, data_limite_superior)
 
 if dados_d:
     df_diario = pd.DataFrame(dados_d)
     df_diario.index = pd.to_datetime(df_diario.index, format='%Y%m%d')
     df_diario.index.name = 'Data'
     df_diario.columns = ['GHI_kWh_m2_dia', 'Temp_Media_C', 'Temp_Min_C', 'Temp_Max_C']
-    
-    # Filtro de erro (-999)
     df_diario = df_diario[df_diario['GHI_kWh_m2_dia'] != -999]
     df_diario.to_csv(ARQUIVO_DIARIO, encoding='utf-8-sig')
-    print(f"✅ Arquivo diário atualizado: {ARQUIVO_DIARIO}")
+    print(f"✅ Arquivo diário atualizado até {df_diario.index.max().date()}")
 
 # ==========================================
 # 2. PROCESSAMENTO HORÁRIO (APENAS GHI)
 # ==========================================
-print("\nIniciando coleta horária (Apenas Irradiância)...")
-# Para dados horários, a NASA limita a 1 ano por pedido. 
-# Vamos buscar o último ano disponível dentro do limite de 30 dias.
-data_inicio_h = max(DATA_INICIAL_ESTUDO, data_limite_superior - timedelta(days=364))
-params_h = "ALLSKY_SFC_SW_DWN"
-dados_h = coletar_dados_nasa("hourly", params_h, data_inicio_h)
+print("\nIniciando coleta horária...")
 
-if dados_h:
-    df_horario = pd.DataFrame(dados_h)
-    df_horario.index = pd.to_datetime(df_horario.index, format='%Y%m%d%H')
-    df_horario.index.name = 'Data_Hora'
-    df_horario.columns = ['GHI_W_m2']
+# Verifica onde parou para não começar sempre em 2024
+if os.path.exists(ARQUIVO_HORARIO):
+    df_h_existente = pd.read_csv(ARQUIVO_HORARIO, index_col=0, parse_dates=True)
+    data_inicio_h = df_h_existente.index.max() + timedelta(hours=1)
+    print(f"Retomando horários de: {data_inicio_h}")
+else:
+    data_inicio_h = DATA_INICIAL_ESTUDO
+    df_h_existente = pd.DataFrame()
+    print("Iniciando base horária do zero (2022).")
+
+if data_inicio_h < data_limite_superior:
+    # A API limita a 1 ano (365 dias) por pedido horário
+    data_fim_h = min(data_inicio_h + timedelta(days=364), data_limite_superior)
     
-    # Filtro de erro (-999) e manutenção de zeros (noite)
-    df_horario = df_horario[df_horario['GHI_W_m2'] != -999]
-    df_horario.to_csv(ARQUIVO_HORARIO, encoding='utf-8-sig')
-    print(f"✅ Arquivo horário atualizado: {ARQUIVO_HORARIO}")
+    params_h = "ALLSKY_SFC_SW_DWN"
+    dados_h = coletar_dados_nasa("hourly", params_h, data_inicio_h, data_fim_h)
+
+    if dados_h:
+        df_novo_h = pd.DataFrame(dados_h)
+        df_novo_h.index = pd.to_datetime(df_novo_h.index, format='%Y%m%d%H')
+        df_novo_h.index.name = 'Data_Hora'
+        df_novo_h.columns = ['GHI_W_m2']
+        
+        # Filtro de erro (-999), mantendo os zeros noturnos
+        df_novo_h = df_novo_h[df_novo_h['GHI_W_m2'] != -999]
+        
+        df_final_h = pd.concat([df_h_existente, df_novo_h]).sort_index()
+        df_final_h = df_final_h[~df_final_h.index.duplicated(keep='last')]
+        df_final_h.to_csv(ARQUIVO_HORARIO, encoding='utf-8-sig')
+        print(f"✅ Arquivo horário atualizado até {df_final_h.index.max()}")
+else:
+    print("✅ Base horária já está atualizada até o limite de 30 dias.")
